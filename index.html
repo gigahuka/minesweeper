@@ -127,19 +127,6 @@
       background: #0f3460;
       box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
     }
-    /* Long-press progress ring */
-    .cell.pressing::after {
-      content: '';
-      position: absolute;
-      inset: 2px;
-      border-radius: 4px;
-      border: 2px solid #e94560;
-      animation: pressRing 1s linear forwards;
-    }
-    @keyframes pressRing {
-      from { opacity: 0; transform: scale(0.6); }
-      to   { opacity: 1; transform: scale(1); }
-    }
     .cell.mine-hit { background: #c0392b !important; }
     .cell.mine-revealed { background: #2c2c2c; }
 
@@ -220,7 +207,7 @@
 
   <p class="hint">
     PC：左クリック＝開く　右クリック＝旗　数字ダブルクリック＝周囲一括開放<br>
-    スマホ：タップ＝開く　1秒長押し＝旗　数字ダブルタップ＝周囲一括開放
+    スマホ：1タップ＝開く　2タップ＝旗の付け消し　3タップ＝周囲一括開放
   </p>
 
   <div class="overlay" id="overlay">
@@ -249,16 +236,12 @@ let timerInterval = null;
 let seconds = 0;
 let firstClick = true;
 
-// Long-press state
-const LONG_PRESS_MS = 1000;
-let longPressTimer = null;
-let longPressCell = null;
+// Touch tap detection
 let touchMoved = false;
-
-// Double-tap detection (mobile)
-let lastTapCell = null;
-let lastTapTime = 0;
-const DOUBLE_TAP_MS = 300;
+let tapCount = 0;
+let tapCell = null;
+let tapTimer = null;
+const TAP_WINDOW_MS = 300;
 
 function init() {
   clearInterval(timerInterval);
@@ -468,52 +451,35 @@ function renderBoard() {
 
       // ── Touch events (mobile) ────────────────────────
       cell.addEventListener('touchstart', (e) => {
-        e.preventDefault(); // テキスト選択・コールアウトをブロック
+        e.preventDefault();
         touchMoved = false;
-
-        // Long-press → flag
-        longPressCell = { r, c };
-        cell.classList.add('pressing');
-        longPressTimer = setTimeout(() => {
-          longPressTimer = null;
-          cell.classList.remove('pressing');
-          if (!touchMoved) {
-            handleFlag(r, c);
-            if (navigator.vibrate) navigator.vibrate(40);
-          }
-        }, LONG_PRESS_MS);
       }, { passive: false });
 
       cell.addEventListener('touchmove', (e) => {
         e.preventDefault();
         touchMoved = true;
-        clearTimeout(longPressTimer);
-        longPressTimer = null;
-        cell.classList.remove('pressing');
       }, { passive: false });
 
       cell.addEventListener('touchend', (e) => {
-        cell.classList.remove('pressing');
-        if (longPressTimer) {
-          // Short tap: reveal or double-tap chord
-          clearTimeout(longPressTimer);
-          longPressTimer = null;
+        if (touchMoved) return;
 
-          if (!touchMoved) {
-            const now = Date.now();
-            const sameCell = lastTapCell && lastTapCell.r === r && lastTapCell.c === c;
-            if (sameCell && now - lastTapTime < DOUBLE_TAP_MS) {
-              // Double-tap
-              e.preventDefault();
-              lastTapCell = null;
-              handleChord(r, c);
-            } else {
-              lastTapCell = { r, c };
-              lastTapTime = now;
-              handleReveal(r, c);
-            }
-          }
+        const sameCell = tapCell && tapCell.r === r && tapCell.c === c;
+        if (sameCell) {
+          tapCount++;
+        } else {
+          tapCount = 1;
+          tapCell = { r, c };
         }
+
+        clearTimeout(tapTimer);
+        const capturedR = r, capturedC = c, capturedCount = tapCount;
+        tapTimer = setTimeout(() => {
+          tapCount = 0;
+          tapCell = null;
+          if      (capturedCount === 1) handleReveal(capturedR, capturedC);
+          else if (capturedCount === 2) { handleFlag(capturedR, capturedC); if (navigator.vibrate) navigator.vibrate(30); }
+          else                          handleChord(capturedR, capturedC);
+        }, TAP_WINDOW_MS);
       });
 
       boardEl.appendChild(cell);
