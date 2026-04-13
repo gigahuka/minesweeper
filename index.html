@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="マインスイーパー">
+  <title>マインスイーパー</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+      touch-action: manipulation;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin: 12px 0 8px;
+      letter-spacing: 2px;
+      color: #e94560;
+    }
+
+    .difficulty {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .diff-btn {
+      padding: 7px 18px;
+      border: 2px solid #e94560;
+      border-radius: 20px;
+      background: transparent;
+      color: #e94560;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: bold;
+    }
+    .diff-btn.active, .diff-btn:hover {
+      background: #e94560;
+      color: #fff;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      max-width: 520px;
+      background: #16213e;
+      border-radius: 12px;
+      padding: 10px 20px;
+      margin-bottom: 14px;
+    }
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+    .status-label { font-size: 0.65rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+    .status-value { font-size: 1.4rem; font-weight: bold; font-family: monospace; min-width: 3ch; text-align: center; }
+    #mine-count { color: #e94560; }
+    #timer-val { color: #0f9; }
+
+    #reset-btn {
+      background: none;
+      border: none;
+      font-size: 1.8rem;
+      cursor: pointer;
+      transition: transform 0.15s;
+      line-height: 1;
+    }
+    #reset-btn:hover { transform: scale(1.2); }
+
+    .board-wrap { overflow: auto; max-width: 100vw; }
+
+    #board {
+      display: inline-grid;
+      gap: 2px;
+      background: #16213e;
+      padding: 10px;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    }
+
+    .cell {
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s, transform 0.1s;
+      -webkit-tap-highlight-color: transparent;
+      position: relative;
+    }
+    .cell.hidden {
+      background: #0f3460;
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .cell.hidden:hover { background: #1a4a7a; }
+    .cell.hidden:active { transform: scale(0.92); }
+    .cell.revealed {
+      background: #16213e;
+      cursor: default;
+    }
+    .cell.revealed.has-number:hover { background: #1e2d50; }
+    .cell.flagged {
+      background: #0f3460;
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    /* Long-press progress ring */
+    .cell.pressing::after {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border-radius: 4px;
+      border: 2px solid #e94560;
+      animation: pressRing 1s linear forwards;
+    }
+    @keyframes pressRing {
+      from { opacity: 0; transform: scale(0.6); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .cell.mine-hit { background: #c0392b !important; }
+    .cell.mine-revealed { background: #2c2c2c; }
+
+    .n1 { color: #4fc3f7; }
+    .n2 { color: #81c784; }
+    .n3 { color: #e57373; }
+    .n4 { color: #7986cb; }
+    .n5 { color: #ff8a65; }
+    .n6 { color: #4dd0e1; }
+    .n7 { color: #f06292; }
+    .n8 { color: #b0bec5; }
+
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .overlay.show { display: flex; }
+    .overlay-box {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 32px 40px;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+      animation: pop 0.25s ease;
+    }
+    @keyframes pop { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .overlay-icon { font-size: 3rem; margin-bottom: 12px; }
+    .overlay-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 8px; }
+    .overlay-sub { color: #aaa; margin-bottom: 20px; font-size: 0.9rem; }
+    .overlay-btn {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      padding: 10px 28px;
+      border-radius: 20px;
+      font-size: 1rem;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .hint { color: #666; font-size: 0.75rem; margin-top: 10px; text-align: center; line-height: 1.6; }
+
+    @media (max-width: 400px) {
+      .cell { width: 28px; height: 28px; font-size: 0.85rem; }
+      h1 { font-size: 1.3rem; }
+    }
+  </style>
+</head>
+<body>
+  <h1>💣 マインスイーパー</h1>
+
+  <div class="difficulty">
+    <button class="diff-btn active" data-level="easy">かんたん</button>
+    <button class="diff-btn" data-level="medium">ふつう</button>
+    <button class="diff-btn" data-level="hard">むずかしい</button>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-item">
+      <span class="status-label">💣 残り</span>
+      <span class="status-value" id="mine-count">10</span>
+    </div>
+    <button id="reset-btn">🙂</button>
+    <div class="status-item">
+      <span class="status-label">⏱ 秒</span>
+      <span class="status-value" id="timer-val">0</span>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <div id="board"></div>
+  </div>
+
+  <p class="hint">
+    PC：左クリック＝開く　右クリック＝旗　数字ダブルクリック＝周囲一括開放<br>
+    スマホ：タップ＝開く　1秒長押し＝旗　数字ダブルタップ＝周囲一括開放
+  </p>
+
+  <div class="overlay" id="overlay">
+    <div class="overlay-box">
+      <div class="overlay-icon" id="overlay-icon"></div>
+      <div class="overlay-title" id="overlay-title"></div>
+      <div class="overlay-sub" id="overlay-sub"></div>
+      <button class="overlay-btn" id="overlay-btn">もう一度</button>
+    </div>
+  </div>
+
+<script>
+const LEVELS = {
+  easy:   { rows: 9,  cols: 9,  mines: 10 },
+  medium: { rows: 16, cols: 16, mines: 40 },
+  hard:   { rows: 16, cols: 30, mines: 99 },
+};
+
+let level = 'easy';
+let board = [];
+let revealed = [];
+let flagged = [];
+let minePositions = new Set();
+let gameOver = false;
+let timerInterval = null;
+let seconds = 0;
+let firstClick = true;
+
+// Long-press state
+const LONG_PRESS_MS = 1000;
+let longPressTimer = null;
+let longPressCell = null;
+let touchMoved = false;
+
+// Double-tap detection (mobile)
+let lastTapCell = null;
+let lastTapTime = 0;
+const DOUBLE_TAP_MS = 300;
+
+function init() {
+  clearInterval(timerInterval);
+  seconds = 0;
+  gameOver = false;
+  firstClick = true;
+  minePositions.clear();
+  document.getElementById('timer-val').textContent = '0';
+  document.getElementById('reset-btn').textContent = '🙂';
+  document.getElementById('overlay').classList.remove('show');
+
+  const { rows, cols, mines } = LEVELS[level];
+  document.getElementById('mine-count').textContent = mines;
+
+  board    = Array.from({ length: rows }, () => Array(cols).fill(0));
+  revealed = Array.from({ length: rows }, () => Array(cols).fill(false));
+  flagged  = Array.from({ length: rows }, () => Array(cols).fill(false));
+
+  renderBoard();
+}
+
+function placeMines(safeRow, safeCol) {
+  const { rows, cols, mines } = LEVELS[level];
+  const forbidden = new Set();
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      const nr = safeRow + dr, nc = safeCol + dc;
+      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols)
+        forbidden.add(nr * cols + nc);
+    }
+  let placed = 0;
+  while (placed < mines) {
+    const pos = Math.floor(Math.random() * rows * cols);
+    if (!minePositions.has(pos) && !forbidden.has(pos)) {
+      minePositions.add(pos); placed++;
+    }
+  }
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (isMine(r, c)) { board[r][c] = -1; continue; }
+      let count = 0;
+      forNeighbors(r, c, (nr, nc) => { if (isMine(nr, nc)) count++; });
+      board[r][c] = count;
+    }
+}
+
+function isMine(r, c) {
+  return minePositions.has(r * LEVELS[level].cols + c);
+}
+
+function forNeighbors(r, c, fn) {
+  const { rows, cols } = LEVELS[level];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) fn(nr, nc);
+    }
+}
+
+function reveal(r, c) {
+  if (revealed[r][c] || flagged[r][c]) return;
+  revealed[r][c] = true;
+  if (board[r][c] === 0)
+    forNeighbors(r, c, (nr, nc) => reveal(nr, nc));
+}
+
+function handleReveal(r, c) {
+  if (gameOver || revealed[r][c] || flagged[r][c]) return;
+  if (firstClick) {
+    firstClick = false;
+    placeMines(r, c);
+    startTimer();
+  }
+  if (isMine(r, c)) {
+    revealed[r][c] = true;
+    endGame(false, r, c);
+    return;
+  }
+  reveal(r, c);
+  renderBoard();
+  checkWin();
+}
+
+// Chord: double-click/tap on a revealed number → open all unflagged neighbors if flag count matches
+function handleChord(r, c) {
+  if (gameOver || !revealed[r][c] || board[r][c] <= 0) return;
+  let flagCount = 0;
+  forNeighbors(r, c, (nr, nc) => { if (flagged[nr][nc]) flagCount++; });
+  if (flagCount !== board[r][c]) return;
+
+  let hitMine = false;
+  forNeighbors(r, c, (nr, nc) => {
+    if (!revealed[nr][nc] && !flagged[nr][nc]) {
+      if (isMine(nr, nc)) {
+        revealed[nr][nc] = true;
+        hitMine = true;
+      } else {
+        reveal(nr, nc);
+      }
+    }
+  });
+  if (hitMine) { endGame(false); return; }
+  renderBoard();
+  checkWin();
+}
+
+function handleFlag(r, c) {
+  if (gameOver || revealed[r][c] || firstClick) return;
+  flagged[r][c] = !flagged[r][c];
+  const { mines } = LEVELS[level];
+  let flagCount = 0;
+  flagged.forEach(row => row.forEach(f => { if (f) flagCount++; }));
+  document.getElementById('mine-count').textContent = mines - flagCount;
+  renderBoard();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    seconds++;
+    document.getElementById('timer-val').textContent = Math.min(seconds, 999);
+  }, 1000);
+}
+
+function endGame(win) {
+  clearInterval(timerInterval);
+  gameOver = true;
+  document.getElementById('reset-btn').textContent = win ? '😎' : '😵';
+  if (!win) {
+    const { rows, cols } = LEVELS[level];
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++)
+        if (isMine(r, c)) revealed[r][c] = true;
+  }
+  renderBoard();
+  setTimeout(() => {
+    document.getElementById('overlay-icon').textContent  = win ? '🎉' : '💥';
+    document.getElementById('overlay-title').textContent = win ? 'クリア！' : 'ゲームオーバー';
+    document.getElementById('overlay-sub').textContent   = win ? `タイム: ${seconds}秒` : 'また挑戦しよう！';
+    document.getElementById('overlay').classList.add('show');
+  }, win ? 300 : 600);
+}
+
+function checkWin() {
+  const { rows, cols, mines } = LEVELS[level];
+  let cnt = 0;
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (revealed[r][c]) cnt++;
+  if (cnt === rows * cols - mines) endGame(true);
+}
+
+function updateMineCount() {
+  const { mines } = LEVELS[level];
+  let flagCount = 0;
+  flagged.forEach(row => row.forEach(f => { if (f) flagCount++; }));
+  document.getElementById('mine-count').textContent = mines - flagCount;
+}
+
+function renderBoard() {
+  const { rows, cols } = LEVELS[level];
+  const boardEl = document.getElementById('board');
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+  boardEl.innerHTML = '';
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const isRevealed = revealed[r][c];
+      const isFlagged  = flagged[r][c];
+      const mine = isMine(r, c);
+
+      if (isRevealed) {
+        if (mine) {
+          cell.classList.add('mine-revealed');
+          cell.textContent = '💣';
+        } else {
+          cell.classList.add('revealed');
+          const n = board[r][c];
+          if (n > 0) {
+            cell.classList.add(`n${n}`, 'has-number');
+            cell.textContent = n;
+          }
+        }
+      } else if (isFlagged) {
+        cell.classList.add('flagged');
+        cell.textContent = '🚩';
+      } else {
+        cell.classList.add('hidden');
+      }
+
+      // ── Desktop events ──────────────────────────────
+      cell.addEventListener('click', (e) => {
+        e.preventDefault();
+        handleReveal(r, c);
+      });
+      cell.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        handleChord(r, c);
+      });
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        handleFlag(r, c);
+      });
+
+      // ── Touch events (mobile) ────────────────────────
+      cell.addEventListener('touchstart', (e) => {
+        touchMoved = false;
+
+        // Long-press → flag
+        longPressCell = { r, c };
+        cell.classList.add('pressing');
+        longPressTimer = setTimeout(() => {
+          longPressTimer = null;
+          cell.classList.remove('pressing');
+          if (!touchMoved) {
+            handleFlag(r, c);
+            // Vibrate feedback if available
+            if (navigator.vibrate) navigator.vibrate(40);
+          }
+        }, LONG_PRESS_MS);
+      }, { passive: true });
+
+      cell.addEventListener('touchmove', () => {
+        touchMoved = true;
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+        cell.classList.remove('pressing');
+      }, { passive: true });
+
+      cell.addEventListener('touchend', (e) => {
+        cell.classList.remove('pressing');
+        if (longPressTimer) {
+          // Short tap: reveal or double-tap chord
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+
+          if (!touchMoved) {
+            const now = Date.now();
+            const sameCell = lastTapCell && lastTapCell.r === r && lastTapCell.c === c;
+            if (sameCell && now - lastTapTime < DOUBLE_TAP_MS) {
+              // Double-tap
+              e.preventDefault();
+              lastTapCell = null;
+              handleChord(r, c);
+            } else {
+              lastTapCell = { r, c };
+              lastTapTime = now;
+              handleReveal(r, c);
+            }
+          }
+        }
+      });
+
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+// ── UI controls ───────────────────────────────────────
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    level = btn.dataset.level;
+    init();
+  });
+});
+document.getElementById('reset-btn').addEventListener('click', init);
+document.getElementById('overlay-btn').addEventListener('click', init);
+
+init();
+</script>
+</body>
+</html>
